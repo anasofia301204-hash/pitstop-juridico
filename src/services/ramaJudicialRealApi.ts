@@ -1,11 +1,11 @@
 /**
  * MOTOR V6 TURBO HÍBRIDO & SAFETY CAR PROTOCOL
- * Real API Client for Rama Judicial de Colombia (API v2) con Triangulación de Proxys Públicos
+ * Real Direct API Client for Rama Judicial de Colombia (API v2)
  * 
- * Orden de Proxys Públicos (Bypass Anti-CORS & Anti-GeoBlocking):
- * 1. https://api.codetabs.com/v1/proxy?quest= + encodeURIComponent(URL_RAMA)
- * 2. https://thingproxy.freeboard.io/fetch/ + URL_RAMA
- * 3. Fallbacks secundarios (allorigins, corsproxy)
+ * Official Endpoints (Direct Fetch):
+ * - Consulta por Radicado: https://consultaprocesos.ramajudicial.gov.co/api/v2/Proceso/Consulta/NumeroRadicado?numero={radicado}&SoloActivos=false&pagina=1
+ * - Consulta por Nombre: https://consultaprocesos.ramajudicial.gov.co/api/v2/Procesos/Consulta/NombreRazonSocial?nombre={nombre}&tipoPersona={tipoPersona}&SoloActivos=false&pagina=1
+ * - Consulta de Actuaciones: https://consultaprocesos.ramajudicial.gov.co/api/v2/Proceso/Actuaciones/{idProceso}?pagina=1
  */
 
 import { ProcesoJudicial, ActuacionEstado } from '../types/database';
@@ -13,7 +13,9 @@ import { MOCK_RAMA_JUDICIAL_SEARCH_DATABASE } from '../mock/initialProcesses';
 import { cleanRadicado } from './ramaJudicialApi';
 
 const RAMA_JUDICIAL_BASE_URL = 'https://consultaprocesos.ramajudicial.gov.co/api/v2';
-const REQUEST_TIMEOUT_MS = 8000;
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 2500;
+const REQUEST_TIMEOUT_MS = 7500;
 
 export interface SafetyCarStatus {
   active: boolean;
@@ -31,61 +33,47 @@ export interface RealApiFetchResult<T> {
 }
 
 /**
- * Generadores de URLs de proxy en orden de prioridad
+ * Función auxiliar con timeout y retries para el protocolo Safety Car (Llamada Directa)
  */
-const PROXY_GENERATORS = [
-  (targetUrl: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
-  (targetUrl: string) => `https://thingproxy.freeboard.io/fetch/${targetUrl}`,
-  (targetUrl: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-  (targetUrl: string) => `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`
-];
-
-/**
- * Triangula la petición hacia la Rama Judicial a través de proxys públicos para evadir CORS y Geo-blocking
- */
-async function fetchJsonWithTriangulation(endpointPath: string): Promise<any> {
-  const targetUrl = `${RAMA_JUDICIAL_BASE_URL}${endpointPath.startsWith('/') ? '' : '/'}${endpointPath}`;
-  let lastError: any = null;
-
-  for (let i = 0; i < PROXY_GENERATORS.length; i++) {
-    const proxyUrl = PROXY_GENERATORS[i](targetUrl);
-    
+async function fetchWithSafetyCarRetries(url: string, options: RequestInit = {}): Promise<Response> {
+  let attempt = 0;
+  
+  while (attempt <= MAX_RETRIES) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-      const res = await fetch(proxyUrl, {
+      const response = await fetch(url, {
+        ...options,
         signal: controller.signal,
         headers: {
-          'Accept': 'application/json, text/plain, */*'
+          'Accept': 'application/json, text/plain, */*',
+          ...(options.headers || {})
         }
       });
 
       clearTimeout(timeoutId);
 
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.trim().length > 0) {
-          try {
-            const data = JSON.parse(text);
-            return data;
-          } catch (jsonErr) {
-            console.warn(`Proxy ${i + 1} retornó contenido no-JSON:`, text.slice(0, 100));
-          }
-        }
+      if (response.ok) {
+        return response;
       }
-      lastError = new Error(`Proxy ${i + 1} respondió con código ${res.status}: ${res.statusText}`);
+      
+      throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
     } catch (err: any) {
-      lastError = err;
-      console.warn(`Intento con Proxy ${i + 1} fallido:`, err.message);
+      attempt++;
+      if (attempt > MAX_RETRIES) {
+        throw new Error(`Safety Car Activado: Fallaron ${MAX_RETRIES + 1} intentos directos hacia la Rama Judicial. (${err.message})`);
+      }
+      // Esperar delay antes del reintento
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
     }
   }
 
-  throw lastError || new Error('Fallo en la triangulación de proxys.');
+  throw new Error('Safety Car: Fallo no recuperable en consulta judicial.');
 }
 
 /**
- * 1. CONSULTA REAL DE PROCESO POR RADICADO DE 23 DÍGITOS
+ * 1. CONSULTA REAL DE PROCESO POR RADICADO DE 23 DÍGITOS (DIRECTO A RAMA JUDICIAL)
  */
 export async function fetchProcesoRealByRadicado(
   radicadoRaw: string
@@ -93,10 +81,11 @@ export async function fetchProcesoRealByRadicado(
   const radicado = cleanRadicado(radicadoRaw);
   const startTime = performance.now();
 
-  const endpointPath = `/Proceso/Consulta/NumeroRadicado?numero=${radicado}&SoloActivos=false&pagina=1`;
+  const endpointUrl = `${RAMA_JUDICIAL_BASE_URL}/Proceso/Consulta/NumeroRadicado?numero=${radicado}&SoloActivos=false&pagina=1`;
 
   try {
-    const json = await fetchJsonWithTriangulation(endpointPath);
+    const res = await fetchWithSafetyCarRetries(endpointUrl);
+    const json = await res.json();
 
     // Mapear respuesta oficial de la Rama Judicial
     const procesosRaw = json.procesos || (Array.isArray(json) ? json : []);
@@ -162,11 +151,11 @@ export async function fetchProcesoRealByRadicado(
         source: 'RAMA_JUDICIAL_API_V2',
         safetyCarDeployed: false,
         executionMs: Math.round(performance.now() - startTime),
-        message: 'Datos extraídos exitosamente mediante triangulación de señal (API v2 Rama Judicial).'
+        message: 'Datos extraídos exitosamente de forma directa desde la API v2 de la Rama Judicial.'
       };
     }
   } catch (err: any) {
-    console.warn('API Rama Judicial inaccesible vía proxys. Desplegando Safety Car...', err);
+    console.warn('API Rama Judicial offline o con bloqueo de red directo. Desplegando Safety Car...', err);
   }
 
   // PROTOCOLO SAFETY CAR ACTIVADO: Contingencia y Cache local
@@ -226,16 +215,17 @@ export async function fetchProcesoRealByRadicado(
 }
 
 /**
- * 2. CONSULTA REAL DE ACTUACIONES POR ID PROCESO
+ * 2. CONSULTA REAL DE ACTUACIONES POR ID PROCESO (DIRECTO A RAMA JUDICIAL)
  */
 export async function fetchActuacionesReales(
   idProceso: string | number
 ): Promise<RealApiFetchResult<ActuacionEstado[]>> {
   const startTime = performance.now();
-  const endpointPath = `/Proceso/Actuaciones/${idProceso}?pagina=1`;
+  const endpointUrl = `${RAMA_JUDICIAL_BASE_URL}/Proceso/Actuaciones/${idProceso}?pagina=1`;
 
   try {
-    const json = await fetchJsonWithTriangulation(endpointPath);
+    const res = await fetchWithSafetyCarRetries(endpointUrl);
+    const json = await res.json();
     const actsRaw = json.actuaciones || (Array.isArray(json) ? json : []);
 
     if (actsRaw.length > 0) {
@@ -267,7 +257,7 @@ export async function fetchActuacionesReales(
       };
     }
   } catch (err) {
-    console.warn('No se pudieron consultar actuaciones reales vía proxys. Usando contingencia.');
+    console.warn('No se pudieron consultar actuaciones reales directamente. Usando contingencia.');
   }
 
   // Contingencia Safety Car
@@ -293,7 +283,7 @@ export async function fetchActuacionesReales(
 }
 
 /**
- * 3. CONSULTA REAL POR NOMBRE O RAZÓN SOCIAL
+ * 3. CONSULTA REAL POR NOMBRE O RAZÓN SOCIAL (DIRECTO A RAMA JUDICIAL)
  */
 export async function fetchProcesosRealByName(
   nombre: string,
@@ -301,10 +291,11 @@ export async function fetchProcesosRealByName(
 ): Promise<RealApiFetchResult<ProcesoJudicial[]>> {
   const startTime = performance.now();
   const encodedName = encodeURIComponent(nombre);
-  const endpointPath = `/Procesos/Consulta/NombreRazonSocial?nombre=${encodedName}&tipoPersona=${tipoPersona}&SoloActivos=false&pagina=1`;
+  const endpointUrl = `${RAMA_JUDICIAL_BASE_URL}/Procesos/Consulta/NombreRazonSocial?nombre=${encodedName}&tipoPersona=${tipoPersona}&SoloActivos=false&pagina=1`;
 
   try {
-    const json = await fetchJsonWithTriangulation(endpointPath);
+    const res = await fetchWithSafetyCarRetries(endpointUrl);
+    const json = await res.json();
     const procesosRaw = json.procesos || (Array.isArray(json) ? json : []);
 
     if (procesosRaw.length > 0) {
@@ -332,7 +323,7 @@ export async function fetchProcesosRealByName(
       };
     }
   } catch (err) {
-    console.warn('API Nombre/Razón social no disponible vía proxys. Desplegando Safety Car...');
+    console.warn('API Nombre/Razón social no disponible directamente. Desplegando Safety Car...');
   }
 
   // Safety Car Local Cache
