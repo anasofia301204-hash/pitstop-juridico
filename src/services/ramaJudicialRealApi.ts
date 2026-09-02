@@ -3,8 +3,9 @@
  * Real API Client for Rama Judicial de Colombia (API v2) con Triangulación de Proxys Públicos
  * 
  * Orden de Proxys Públicos (Bypass Anti-CORS & Anti-GeoBlocking):
- * 1. https://api.allorigins.win/raw?url= + encodeURIComponent(URL_RAMA)
- * 2. https://corsproxy.io/? + encodeURIComponent(URL_RAMA)
+ * 1. https://api.codetabs.com/v1/proxy?quest= + encodeURIComponent(URL_RAMA)
+ * 2. https://thingproxy.freeboard.io/fetch/ + URL_RAMA
+ * 3. Fallbacks secundarios (allorigins, corsproxy)
  */
 
 import { ProcesoJudicial, ActuacionEstado } from '../types/database';
@@ -33,6 +34,8 @@ export interface RealApiFetchResult<T> {
  * Generadores de URLs de proxy en orden de prioridad
  */
 const PROXY_GENERATORS = [
+  (targetUrl: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
+  (targetUrl: string) => `https://thingproxy.freeboard.io/fetch/${targetUrl}`,
   (targetUrl: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
   (targetUrl: string) => `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`
 ];
