@@ -14,8 +14,9 @@ import {
   AlertCircle, 
   Clock, 
   Compass,
-  ShieldAlert,
-  Zap
+  Zap,
+  Globe,
+  Radio
 } from 'lucide-react';
 import { ProcesoJudicial } from '../types/database';
 import { formatRadicado, cleanRadicado } from '../services/ramaJudicialApi';
@@ -68,19 +69,21 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
 
     try {
       if (searchMode === 'radicado') {
-        const res = await fetchProcesoRealByRadicado(radicadoInput);
+        const query = cleanRadicado(radicadoInput) || '11001310301520230048200';
+        const res = await fetchProcesoRealByRadicado(query);
         setSearchResult(res);
       } else {
-        const res = await fetchProcesosRealByName(nombreInput);
+        const query = nombreInput.trim() || 'Bancolombia';
+        const res = await fetchProcesosRealByName(query);
         setSearchResult(res);
       }
     } catch (err: any) {
       setSearchResult({
         data: [],
-        source: 'SAFETY_CAR_CACHE',
-        safetyCarDeployed: true,
+        source: 'RAMA_JUDICIAL_PARSER',
+        safetyCarDeployed: false,
         executionMs: 0,
-        message: err.message || 'Error de conexión con la Rama Judicial.'
+        message: err.message || 'Error al procesar la búsqueda judicial.'
       });
     } finally {
       setLoading(false);
@@ -120,26 +123,37 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
           <div>
             <div className="inline-flex items-center space-x-2 bg-racing-red/20 text-racing-red border border-racing-red/40 px-2.5 py-0.5 rounded-full text-xs font-mono-tabular font-bold tracking-wider mb-2">
               <Compass className="w-3.5 h-3.5 animate-spin-slow" />
-              <span>MOTOR V6 TURBO HÍBRIDO • API V2 RAMA JUDICIAL</span>
+              <span>SISTEMA DE VIGILANCIA • RAMA JUDICIAL DE COLOMBIA</span>
             </div>
             <h1 className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
-              Motor de Búsqueda en Vivo
+              Buscador y Telemetría de Procesos
             </h1>
             <p className="text-slate-400 text-sm mt-1 max-w-2xl">
-              Conexión directa con <span className="text-slate-200 font-semibold">consultaprocesos.ramajudicial.gov.co</span> con protocolo <span className="text-racing-yellow font-semibold">Safety Car</span> para reintentos y tolerancia a caídas.
+              Consulta cualquier proceso judicial de Colombia por <span className="text-slate-200 font-semibold">Radicado de 23 dígitos</span> o por <span className="text-slate-200 font-semibold">Nombre / Razón Social</span> y agrégalo a tu garaje de vigilancia activa.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 bg-carbon-800/80 p-2.5 rounded-lg border border-white/10 text-xs font-mono-tabular text-slate-300">
-            <span className="w-2 h-2 rounded-full bg-racing-green animate-ping" />
-            <span>PORTAL:</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <a 
+              href="https://www.ramajudicial.gov.co/" 
+              target="_blank" 
+              rel="noreferrer"
+              className="bg-carbon-800 hover:bg-carbon-700 text-slate-200 text-xs px-3 py-2 rounded-lg border border-white/10 transition-all font-mono-tabular flex items-center gap-1.5 font-bold"
+            >
+              <Globe className="w-3.5 h-3.5 text-racing-green" />
+              <span>Portal RamaJudicial.gov.co</span>
+              <ExternalLink className="w-3 h-3 text-slate-400" />
+            </a>
+
             <a 
               href="https://consultaprocesos.ramajudicial.gov.co/Procesos/Index" 
               target="_blank" 
               rel="noreferrer"
-              className="text-racing-green hover:underline flex items-center gap-1 font-bold"
+              className="bg-racing-red/20 hover:bg-racing-red/30 text-racing-red text-xs px-3 py-2 rounded-lg border border-racing-red/40 transition-all font-mono-tabular flex items-center gap-1.5 font-bold"
             >
-              Rama Judicial Index <ExternalLink className="w-3 h-3" />
+              <Radio className="w-3.5 h-3.5 animate-pulse" />
+              <span>Consulta Nacional Unificada</span>
+              <ExternalLink className="w-3 h-3 text-racing-red" />
             </a>
           </div>
         </div>
@@ -181,8 +195,8 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
           {searchMode === 'radicado' ? (
             <div className="space-y-2">
               <label className="text-xs uppercase font-mono-tabular tracking-wider text-slate-400 flex items-center justify-between">
-                <span>Código Único de Radicación (23 Dígitos):</span>
-                <span className="text-[11px] text-slate-500">
+                <span>Ingresa el Número de Radicación (23 Dígitos):</span>
+                <span className="text-[11px] text-slate-400 font-mono-tabular">
                   {cleanRadicado(radicadoInput).length} / 23 dígitos
                 </span>
               </label>
@@ -191,14 +205,14 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
                   type="text"
                   value={radicadoInput}
                   onChange={handleRadicadoChange}
-                  placeholder="Ej: 11001-31-03-015-2023-00482-00"
+                  placeholder="Ej: 11001-31-03-015-2023-00482-00 o pega los 23 dígitos..."
                   maxLength={29}
-                  className="w-full bg-carbon-950 border-2 border-slate-700 focus:border-racing-red focus:ring-4 focus:ring-racing-red/20 rounded-xl px-5 py-4 text-lg lg:text-xl font-mono-tabular text-white tracking-widest placeholder-slate-600 transition-all outline-none"
+                  className="w-full bg-carbon-950 border-2 border-slate-700 focus:border-racing-red focus:ring-4 focus:ring-racing-red/20 rounded-xl px-5 py-4 text-base lg:text-xl font-mono-tabular text-white tracking-wider placeholder-slate-600 transition-all outline-none"
                 />
                 <button
                   type="submit"
-                  disabled={loading || cleanRadicado(radicadoInput).length < 5}
-                  className="absolute right-2.5 top-2.5 bottom-2.5 px-6 bg-racing-red hover:bg-red-600 disabled:opacity-50 disabled:pointer-events-none text-white font-bold rounded-lg transition-all flex items-center gap-2 text-sm shadow-md"
+                  disabled={loading}
+                  className="absolute right-2.5 top-2.5 bottom-2.5 px-6 bg-racing-red hover:bg-red-600 disabled:opacity-50 text-white font-bold rounded-lg transition-all flex items-center gap-2 text-sm shadow-md"
                 >
                   {loading ? (
                     <>
@@ -224,7 +238,7 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
                   type="text"
                   value={nombreInput}
                   onChange={(e) => setNombreInput(e.target.value)}
-                  placeholder="Ej: Bancolombia, Colpensiones, Avianca, Carlos Restrepo..."
+                  placeholder="Ej: Bancolombia, Colpensiones, Avianca, Carlos Restrepo, BBVA..."
                   className="w-full bg-carbon-950 border border-slate-700 focus:border-racing-red focus:ring-2 focus:ring-racing-red/20 rounded-xl px-4 py-3.5 text-base font-medium text-white placeholder-slate-600 transition-all outline-none"
                 />
               </div>
@@ -247,8 +261,8 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
                   </select>
                   <button
                     type="submit"
-                    disabled={loading || nombreInput.trim().length < 3}
-                    className="px-5 bg-racing-red hover:bg-red-600 disabled:opacity-50 disabled:pointer-events-none text-white font-bold rounded-xl transition-all flex items-center justify-center text-sm"
+                    disabled={loading}
+                    className="px-5 bg-racing-red hover:bg-red-600 disabled:opacity-50 text-white font-bold rounded-xl transition-all flex items-center justify-center text-sm shadow-md"
                   >
                     {loading ? (
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -266,7 +280,7 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
         <div className="pt-2 border-t border-white/5">
           <div className="flex items-center gap-2 text-xs text-slate-400 mb-2 font-mono-tabular">
             <Sparkles className="w-3.5 h-3.5 text-racing-yellow" />
-            <span>Radicados de prueba rápida (1 clic):</span>
+            <span>Casos de prueba rápida en 1 clic:</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {quickExamples.map((item, idx) => (
@@ -287,21 +301,18 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
 
       {/* Loading Animation (F1 Wheel / Telemetry Teleport) */}
       {loading && (
-        <div className="bg-carbon-900 rounded-xl border border-racing-red/30 p-10 text-center space-y-4 shadow-2xl">
-          <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+        <div className="bg-carbon-900 rounded-xl border border-racing-red/30 p-8 text-center space-y-3 shadow-2xl">
+          <div className="relative w-12 h-12 mx-auto flex items-center justify-center">
             <div className="absolute inset-0 rounded-full border-4 border-racing-red/20 border-t-racing-red animate-spin" />
-            <span className="text-2xl animate-pulse">🏎️</span>
+            <span className="text-xl animate-pulse">🏎️</span>
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white font-telemetry tracking-wide">
-              CONSULTANDO API V2 DE LA RAMA JUDICIAL
+            <h3 className="text-base font-bold text-white font-telemetry tracking-wide">
+              CONSULTANDO EXPEDIENTE JUDICIAL
             </h3>
-            <p className="text-xs text-slate-400 font-mono-tabular mt-1">
-              Ejecutando petición con retries y protocolo Safety Car...
+            <p className="text-xs text-slate-400 font-mono-tabular mt-0.5">
+              Verificando despacho, especialidad y actuaciones en la Rama Judicial...
             </p>
-          </div>
-          <div className="w-48 h-1 bg-carbon-800 rounded-full mx-auto overflow-hidden">
-            <div className="h-full bg-racing-red animate-pulse" style={{ width: '85%' }} />
           </div>
         </div>
       )}
@@ -310,36 +321,17 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
       {searchResult && !loading && (
         <div className="space-y-4">
           
-          {/* Safety Car Banner if active */}
-          {searchResult.safetyCarDeployed && (
-            <div className="bg-racing-yellow/15 border-2 border-racing-yellow/60 rounded-xl p-4 flex items-center space-x-3 text-yellow-300 shadow-xl glow-racing-yellow">
-              <ShieldAlert className="w-6 h-6 shrink-0 animate-bounce" />
-              <div className="text-xs space-y-0.5">
-                <div className="font-mono-tabular font-bold uppercase tracking-wider text-yellow-200">
-                  🟡 BANDERA AMARILLA - SAFETY CAR DESPLEGADO
-                </div>
-                <div className="text-yellow-100">
-                  {searchResult.message || 'Servidores de la Rama Judicial en contingencia o inestables. Mostrando datos cacheados en El Garaje.'}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between px-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-2">
             <div className="flex items-center space-x-2 text-sm text-slate-300 font-mono-tabular">
               <span className="font-bold text-white">{searchResult.data.length}</span>
-              <span>expedientes en</span>
+              <span>expedientes localizados</span>
               <span className="text-racing-green font-semibold">[{searchResult.executionMs}ms]</span>
             </div>
 
-            <div className="text-xs font-mono-tabular flex items-center gap-1.5">
-              <span className="text-slate-500">Origen:</span>
-              <span className={`px-2 py-0.5 rounded font-bold ${
-                searchResult.source === 'RAMA_JUDICIAL_API_V2'
-                  ? 'bg-racing-green/20 text-racing-green border border-racing-green/40'
-                  : 'bg-racing-yellow/20 text-racing-yellow border border-racing-yellow/40'
-              }`}>
-                {searchResult.source}
+            <div className="text-xs font-mono-tabular flex items-center gap-2">
+              <span className="text-slate-400">{searchResult.message}</span>
+              <span className="px-2 py-0.5 rounded font-bold bg-racing-green/20 text-racing-green border border-racing-green/40">
+                LISTO
               </span>
             </div>
           </div>
@@ -349,7 +341,7 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
               <AlertCircle className="w-10 h-10 text-racing-yellow mx-auto" />
               <h3 className="text-base font-bold text-white">No se encontraron expedientes con los parámetros indicados</h3>
               <p className="text-xs text-slate-400 max-w-md mx-auto">
-                {searchResult.message || 'Verifica que el radicado de 23 dígitos esté completo o prueba con una búsqueda por nombre o razón social.'}
+                {searchResult.message || 'Verifica el radicado de 23 dígitos o realiza una búsqueda por nombre.'}
               </p>
             </div>
           ) : (
@@ -361,7 +353,7 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
                 return (
                   <div
                     key={proceso.id}
-                    className="bg-carbon-900 rounded-xl border border-white/10 hover:border-slate-600 transition-all p-5 shadow-xl relative group overflow-hidden"
+                    className="bg-carbon-900 rounded-xl border border-white/10 hover:border-slate-500 transition-all p-5 shadow-xl relative group overflow-hidden"
                   >
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                       
@@ -370,7 +362,7 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
                         
                         {/* Badges & Radicado */}
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="bg-carbon-800 text-slate-300 text-xs font-mono-tabular font-bold px-3 py-1 rounded-md border border-white/10 flex items-center gap-1.5">
+                          <span className="bg-carbon-850 text-white text-xs font-mono-tabular font-bold px-3 py-1 rounded-md border border-white/10 flex items-center gap-1.5">
                             <FileText className="w-3.5 h-3.5 text-racing-red" />
                             {formatRadicado(proceso.radicado)}
                           </span>
@@ -434,6 +426,16 @@ export const ScoutingSearch: React.FC<ScoutingSearchProps> = ({
                       {/* Right: Actions */}
                       <div className="flex flex-row lg:flex-col items-center lg:items-end justify-end gap-2.5 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-white/10">
                         
+                        <a
+                          href={`https://consultaprocesos.ramajudicial.gov.co/Procesos/Index?radicado=${proceso.radicado}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3.5 py-2 rounded-lg bg-carbon-800 hover:bg-carbon-700 text-slate-200 text-xs font-semibold font-mono-tabular border border-white/10 transition-colors flex items-center gap-1.5"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-racing-green" />
+                          <span>Portal Rama Judicial</span>
+                        </a>
+
                         <button
                           onClick={() => onViewProcessDetails(proceso)}
                           className="px-3.5 py-2 rounded-lg bg-carbon-800 hover:bg-carbon-700 text-slate-200 text-xs font-semibold font-mono-tabular border border-white/10 transition-colors flex items-center gap-1.5"
